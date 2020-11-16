@@ -1,0 +1,20 @@
+send_code:
+  version: 1.0
+  js:
+    js/actions.js: { }
+  dependencies:
+    - core/drupal
+    - core/jquery.once
+
+hide_secret:
+  version: 1.0
+  js:
+    js/hide_secret.js: { }
+  dependencies:
+    - core/jquery.once
+
+custom_filed:
+  version: 1.0
+  css:
+    theme:
+      css/custom_filed.css: { }

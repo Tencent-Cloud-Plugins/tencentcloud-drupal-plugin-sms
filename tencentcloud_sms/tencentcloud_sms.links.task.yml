@@ -1,0 +1,16 @@
+tencentcloud_sms.settings_form:
+  route_name: tencentcloud_sms.settings_form
+  title: Tencentcloud SMS Settings
+  weight: 8
+
+tencentcloud_sms.login:
+  route_name: tencentcloud_sms.login
+  base_route: user.page
+  title: '使用手机号登陆'
+  weight: 2
+
+tencentcloud_sms.reset_pwd:
+  route_name: tencentcloud_sms.reset_pwd
+  base_route: user.page
+  title: '使用手机号重置密码'
+  weight: 8

@@ -1,0 +1,12 @@
+name: 'TencentCloud SMS Plugin'
+type: module
+description: 'Support mobile phone number LOGIN, through the mobile phone number + SMS authentication code to find passwords and other functions.'
+package: User
+core: 8.x
+core_version_requirement: ^8 || ^9
+configure: tencentcloud_sms.settings_form
+
+# Information added by Drupal.org packaging script on 2020-06-03
+version: '8.x-3.0'
+project: 'tencentcloud_sms'
+datestamp: 1591216087

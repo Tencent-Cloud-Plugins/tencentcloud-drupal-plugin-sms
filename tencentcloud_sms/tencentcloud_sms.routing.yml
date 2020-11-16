@@ -1,0 +1,29 @@
+tencentcloud_sms.settings_form:
+  path: '/admin/config/people/accounts/tencentcloud_sms'
+  defaults:
+    _form: '\Drupal\tencentcloud_sms\Form\TencentcloudSmsSettingsForm'
+    _title: 'TencentCloud SMS Plugin'
+  requirements:
+    _permission: 'administer SMS settings'
+  options:
+    _admin_route: TRUE
+
+tencentcloud_sms.login:
+  path: '/tencentcloud_sms/login'
+  defaults:
+    _form: '\Drupal\tencentcloud_sms\Form\UserLoginForm'
+    _title: '手机号登陆'
+  requirements:
+    _user_is_logged_in: 'FALSE'
+  options:
+    _maintenance_access: TRUE
+
+tencentcloud_sms.reset_pwd:
+  path: '/tencentcloud_sms/reset_pwd'
+  defaults:
+    _form: '\Drupal\tencentcloud_sms\Form\ResetPasswordForm'
+    _title: '手机号重置密码'
+  requirements:
+    _access: 'TRUE'
+  options:
+    _maintenance_access: TRUE

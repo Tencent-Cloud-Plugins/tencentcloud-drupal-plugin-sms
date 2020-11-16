@@ -1,0 +1,302 @@
+<?php
+/**
+ * Copyright (C) 2020 Tencent Cloud.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+use Drupal\Core\Ajax\AjaxResponse;
+use Drupal\Core\Ajax\InvokeCommand;
+use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Field\BaseFieldDefinition;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\user\Entity\User;
+use Drupal\user\UserInterface;
+use Drupal\tencentcloud_sms\SmsUtils;
+use Drupal\tencentcloud_sms\UsageDataReport;
+
+/**
+ * Implements hook_install().
+ */
+function tencentcloud_sms_install()
+{
+  $host = \Drupal::request()->getSchemeAndHttpHost();
+  $uuid = substr(md5(\Drupal::config('system.site')->get('uuid')), 8, 16);
+  $data = [
+    'action' => 'activate',
+    'plugin_type' => 'sms',
+    'data' => [
+      'site_id' => 'drupal_' . $uuid,
+      'site_url' => $host,
+      'site_app' => 'Drupal',
+      'cust_sec_on' => 1,
+      'others' => \json_encode([
+        'captcha_appid' => '',
+        'captcha_appid_pwd' => '',
+      ])
+    ]
+  ];
+  (new UsageDataReport())->report($data);
+}
+
+
+/**
+ * Implements hook_schema().
+ */
+function tencentcloud_sms_schema() {
+  $schema['tencentcloud_sms_records'] = [
+    'description' => 'Stores the data about sent SMS record.',
+    'fields' => [
+      'rid' => [
+        'description' => 'record id.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ],
+      'phone_number' => [
+        'description' => 'phone number.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'verify_code' => [
+        'description' => 'verify code.',
+        'type' => 'varchar',
+        'length' => 16,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'uid' => [
+        'description' => "User's {users}.uid.",
+        'type' => 'int',
+        'not null' => TRUE,
+        'unsigned' => TRUE,
+        'default' => 0,
+      ],
+      'send_time' => [
+        'description' => 'A Unix timestamp.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+      'type' => [
+        'description' => 'code type.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'unsigned' => TRUE,
+        'default' => 1,
+      ],
+      'response' => [
+        'description' => 'response',
+        'type' => 'text',
+        'not null' => TRUE,
+      ],
+      'status' => [
+        'description' => 'code status',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ],
+    ],
+    'primary key' => ['rid'],
+    'indexes' => [
+      'phone_code_date_stat_idx' => ['phone_number', 'verify_code', 'send_time', 'type', 'status'],
+    ],
+  ];
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function tencentcloud_sms_uninstall($is_syncing)
+{
+  \Drupal::configFactory()->getEditable('tencentcloud_sms.settings')->delete();
+  $host = \Drupal::request()->getSchemeAndHttpHost();
+  $uuid = substr(md5(\Drupal::config('system.site')->get('uuid')), 8, 16);
+  $data = [
+    'action' => 'deactivate',
+    'plugin_type' => 'sms',
+    'data' => [
+      'site_id' => 'drupal_' . $uuid,
+      'site_url' => $host,
+      'site_app' => 'Drupal',
+      'cust_sec_on' => 1,
+      'others' => \json_encode(array())
+    ]
+  ];
+  (new UsageDataReport())->report($data);
+}
+
+
+/**
+ * Implements hook_help().
+ */
+function tencentcloud_sms_help($route_name, RouteMatchInterface $route_match)
+{
+  $output = '';
+  if ( $route_name == 'help.page.tencentcloud_sms' ) {
+    $output .= '<h3>' . t('About') . '</h3>';
+    $output .= '<li> <a target="_blank" href="https://openapp.qq.com/docs/">文档中心</a></li>';
+  }
+  return $output;
+}
+
+/**
+ * Implements hook_entity_base_field_info().
+ */
+function tencentcloud_sms_entity_base_field_info(EntityTypeInterface $entity_type) {
+  $fields = [];
+  if ($entity_type->id() == 'user') {
+    $fields['phone_number'] = BaseFieldDefinition::create('string')
+      ->setLabel('手机号')
+      ->setDisplayOptions('view', [
+        'label' => 'inline',
+        'type' => 'string'
+      ])
+      ->setDisplayOptions('form', [
+        'type' => 'string_textfield'
+      ])
+//      ->setStorageRequired(TRUE)
+//      ->setRequired(TRUE)
+      ->setDisplayConfigurable('view', true)
+      ->setDisplayConfigurable('form', true);
+  }
+  return $fields;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function tencentcloud_sms_form_user_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id)
+{
+  if ($form_id === 'user_register_form') {
+    unset($form['phone_number']);
+    return $form;
+  }
+  $form['phone_number']['#weight'] = 97;
+  $form['verify_code'] = array(
+    '#type' => 'textfield',
+    '#title' => '短信验证码',
+    '#required' => FALSE,
+    '#default_value' => '',
+    '#weight' => 98,
+  );
+  $form['verify_send'] = array(
+    '#type' => 'button',
+    '#name' => 'send_code',
+    '#value' => '发送短信验证码',
+    '#executes_submit_callback' => FALSE,
+    '#weight' => 99,
+    '#limit_validation_errors' => array(array('name')),
+    '#ajax' => array(
+      'callback' => 'tencentcloud_sms_form_code_send_callback',
+    ),
+    '#attached' => array(
+      'library' => array(
+        'tencentcloud_sms/send_code',
+      ),
+    ),
+  );
+  $form['#validate'][] = 'tencentcloud_sms_user_form_validateAuthentication';
+
+  return $form;
+}
+
+function tencentcloud_sms_user_form_validateAuthentication(&$form, \Drupal\Core\Form\FormStateInterface $form_state)
+{
+  if( \Drupal::request()->isXmlHttpRequest()) {
+    return;
+  }
+
+  $currentUser = \Drupal::currentUser();
+  $roles = $currentUser->getRoles();
+  $currentUserId = $currentUser->id();
+  $editUid = \Drupal::routeMatch()->getRawParameter('user');
+
+  if($currentUserId !== $editUid  && !in_array('administrator',$roles)) {
+    return;
+  }
+  $user = User::load($editUid);
+
+  if (!$user) {
+    $form_state->setErrorByName('name', '未登陆！');
+    return $form_state;
+  }
+  $phone = $form_state->getValue('phone_number');
+  $phone = $phone[0]['value'];
+
+  $user_phone = $user->get('phone_number')->getString();
+  $verify_code = $form_state->getValue('verify_code');
+  //用户手机号未修改直接跳过
+  if ($phone ===  $user_phone && empty($verify_code)) {
+    return;
+  }
+  $rid = SmsUtils::isValidVerifyCode($phone, $verify_code, SmsUtils::TYPE_BIND);
+  if ($rid === 0) {
+    $form_state->setErrorByName('verify_code', '验证码错误！');
+    return $form_state;
+  }
+
+  $user->set('phone_number',$phone);
+  $form_state->set('rid', $rid);
+  return $user->save();
+}
+
+
+/**
+ * Ajax call back.
+ * @param $form
+ * @param \Drupal\Core\Form\FormStateInterface $form_state
+ * @return AjaxResponse
+ */
+function tencentcloud_sms_form_code_send_callback($form, \Drupal\Core\Form\FormStateInterface &$form_state)
+{
+  $response = new AjaxResponse();
+  try {
+    $form_id = $form_state->getValue('form_id');
+    $phone = $form_state->getValue('phone_number');
+    if (in_array($form_id,['user_form', 'user_register_form'])) {
+      $phone = $phone[0]['value'];
+    }
+    if (!SmsUtils::isPhoneNumber($phone)) {
+      $response->addCommand(new InvokeCommand(NULL, 'sendCodeCallback', [['msg'=>'手机号不正确!','code'=>10001]]));
+      return $response;
+    }
+    //验证码类型
+    $type = SmsUtils::FORM_ID_TYPE_MAP[$form_id] ?: SmsUtils::TYPE_LOGIN;
+
+    $uid = SmsUtils::getUidByPhone($phone);
+    //创建新账号和绑定手机号时，不能使用已经绑定过的手机好吗
+    if ($uid !== 0 && in_array($type, [SmsUtils::TYPE_BIND ,SmsUtils::TYPE_REGISTER])) {
+      $response->addCommand(new InvokeCommand(NULL, 'sendCodeCallback', [['msg'=>'该手机号码已被绑定!','code'=>100002]]));
+      return $response;
+    }
+
+    //登陆和重置密码的需要先绑定手机号
+    if ($uid === 0 && in_array($type, [SmsUtils::TYPE_LOGIN ,SmsUtils::TYPE_RESET_PWD])) {
+      $response->addCommand(new InvokeCommand(NULL, 'sendCodeCallback', [['msg'=>'未绑定用户!','code'=>100002]]));
+      return $response;
+    }
+    //发送短信
+    SmsUtils::sendVerifyCodeSMS($phone,$type, $uid);
+    $response->addCommand(new InvokeCommand(NULL, 'sendCodeCallback', [['msg'=>'发送成功!','code'=>0]]));
+    return $response;
+  } catch (\Exception $e) {
+    $response->addCommand(new InvokeCommand(NULL, 'sendCodeCallback', [['msg'=>$e->getMessage(),'code'=>1000]]));
+    return $response;
+  }
+}
